@@ -44,9 +44,11 @@ export default function AdminPage() {
   const [dinamica, setDinamica] = useState(null)
   const [groupSize, setGroupSize] = useState(3)
   const [timerMinutes, setTimerMinutes] = useState(5)
+  const [timerEnd, setTimerEnd] = useState(null)
   const [usedDinamicas, setUsedDinamicas] = useState([])
   const [pairHistory, setPairHistory] = useState({})
   const [loading, setLoading] = useState(false)
+  const [timeLeft, setTimeLeft] = useState(null)
 
   useEffect(() => {
     if (!authed) return
@@ -68,13 +70,25 @@ export default function AdminPage() {
         setDinamica(g.dinamica || null)
         setUsedDinamicas(g.usedDinamicas || [])
         setPairHistory(g.pairHistory || {})
+        setTimerEnd(g.timerEnd || null)
       } else {
-        setGroups([]); setDinamica(null)
+        setGroups([]); setDinamica(null); setTimerEnd(null)
       }
     }))
 
     return () => unsubs.forEach(u => u())
   }, [authed])
+
+  useEffect(() => {
+    if (!timerEnd) { setTimeLeft(null); return }
+    const tick = () => {
+      const left = Math.max(0, Math.round((timerEnd - Date.now()) / 1000))
+      setTimeLeft(left)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [timerEnd])
 
   function login(e) {
     e.preventDefault()
@@ -83,7 +97,7 @@ export default function AdminPage() {
   }
 
   async function generateGroups() {
-    if (participants.length < 2) { alert('Necesitás al menos 2 participantes.'); return }
+    if (participants.length < 2) { alert('Necesitas al menos 2 participantes.'); return }
     setLoading(true)
     try {
       const names = participants.map(p => p.name)
@@ -92,14 +106,14 @@ export default function AdminPage() {
       const din = getRandomDinamica(usedDinamicas)
       const newUsed = [...usedDinamicas, din.id]
       const round = (session?.round || 0) + 1
-      const timerEnd = Date.now() + timerMinutes * 60 * 1000
 
       await set(ref(db, 'groups'), {
         list: groupsToFirebase(list),
         dinamica: din,
         usedDinamicas: newUsed,
         pairHistory: newPairHistory,
-        timerEnd,
+        timerEnd: null,
+        timerRunning: false,
         count: list.length
       })
       await set(ref(db, 'session'), { status: 'active', round })
@@ -111,11 +125,35 @@ export default function AdminPage() {
     setLoading(false)
   }
 
+  async function startTimer() {
+    const end = Date.now() + timerMinutes * 60 * 1000
+    await set(ref(db, 'groups/timerEnd'), end)
+    await set(ref(db, 'groups/timerRunning'), true)
+  }
+
+  async function addTime(mins) {
+    const base = (timerEnd && timerEnd > Date.now()) ? timerEnd : Date.now()
+    const newEnd = base + mins * 60 * 1000
+    await set(ref(db, 'groups/timerEnd'), newEnd)
+    await set(ref(db, 'groups/timerRunning'), true)
+  }
+
+  async function removeTime(mins) {
+    if (!timerEnd) return
+    const newEnd = Math.max(Date.now() + 10000, timerEnd - mins * 60 * 1000)
+    await set(ref(db, 'groups/timerEnd'), newEnd)
+  }
+
+  async function stopTimer() {
+    await set(ref(db, 'groups/timerEnd'), null)
+    await set(ref(db, 'groups/timerRunning'), false)
+  }
+
   async function backToWaiting() {
     if (!confirm('¿Volver a la sala de espera?')) return
     await set(ref(db, 'session'), { status: 'waiting', round: session?.round || 0 })
     await remove(ref(db, 'groups'))
-    setGroups([]); setDinamica(null); setTab('participants')
+    setGroups([]); setDinamica(null); setTimerEnd(null); setTab('participants')
   }
 
   async function resetAll() {
@@ -124,13 +162,18 @@ export default function AdminPage() {
     await remove(ref(db, 'groups'))
     await set(ref(db, 'session'), { status: 'waiting', round: 0 })
     setGroups([]); setParticipants([]); setDinamica(null)
-    setPairHistory({}); setUsedDinamicas([])
+    setPairHistory({}); setUsedDinamicas([]); setTimerEnd(null)
     setTab('participants')
   }
 
   async function removeParticipant(id) {
     await remove(ref(db, `participants/${id}`))
   }
+
+  const timerRunning = timerEnd && timerEnd > Date.now()
+  const timerDisplay = timeLeft != null
+    ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}`
+    : null
 
   if (!authed) return (
     <>
@@ -230,21 +273,24 @@ export default function AdminPage() {
                 <div>
                   <div className="config-label">Tamaño del grupo</div>
                   <select value={groupSize} onChange={e => setGroupSize(Number(e.target.value))}>
-                    <option value={2}>2 personas</option>
-                    <option value={3}>3 personas</option>
-                    <option value={4}>4 personas</option>
-                    <option value={5}>5 personas</option>
+                    {[2,3,4,5,6,7,8,9,10].map(n => (
+                      <option key={n} value={n}>{n} personas</option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <div className="config-label">Tiempo</div>
-                  <select value={timerMinutes} onChange={e => setTimerMinutes(Number(e.target.value))}>
-                    <option value={3}>3 min</option>
-                    <option value={5}>5 min</option>
-                    <option value={7}>7 min</option>
-                    <option value={10}>10 min</option>
-                    <option value={15}>15 min</option>
-                  </select>
+                  <div className="config-label">Tiempo de ronda</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={timerMinutes}
+                      onChange={e => setTimerMinutes(Math.max(1, Number(e.target.value)))}
+                      style={{ width: '60px' }}
+                    />
+                    <span style={{ fontSize: '13px', color: 'var(--muted)' }}>min</span>
+                  </div>
                 </div>
               </div>
 
@@ -276,6 +322,47 @@ export default function AdminPage() {
                 <div className="din-desc">{dinamica.desc}</div>
               </div>
             )}
+
+            {/* Timer control panel */}
+            <div className="card mb1">
+              <div className="section-label mb05">⏱ Control del tiempo</div>
+
+              {timerDisplay && timeLeft > 0 ? (
+                <div style={{ textAlign: 'center', marginBottom: '0.75rem' }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, fontFamily: 'var(--head)', color: timeLeft <= 60 ? 'var(--red2)' : 'var(--gold2)', letterSpacing: '2px' }}>
+                    {timerDisplay}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>tiempo restante</div>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', marginBottom: '0.75rem', color: 'var(--muted)', fontSize: '13px' }}>
+                  Timer detenido — inicialo cuando el grupo esté listo
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.6rem' }}>
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={timerMinutes}
+                  onChange={e => setTimerMinutes(Math.max(1, Number(e.target.value)))}
+                  style={{ width: '60px' }}
+                />
+                <span style={{ fontSize: '13px', color: 'var(--muted)' }}>min</span>
+                <button className="btn btn-gold" style={{ flex: 1, padding: '8px' }} onClick={startTimer}>
+                  ▶ {timerRunning ? 'Reiniciar' : 'Iniciar'} timer
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <button className="btn btn-ghost" style={{ flex: 1, fontSize: '13px', padding: '7px 4px' }} onClick={() => addTime(1)}>+1 min</button>
+                <button className="btn btn-ghost" style={{ flex: 1, fontSize: '13px', padding: '7px 4px' }} onClick={() => addTime(5)}>+5 min</button>
+                <button className="btn btn-ghost" style={{ flex: 1, fontSize: '13px', padding: '7px 4px' }} onClick={() => removeTime(1)}>−1 min</button>
+                <button className="btn btn-ghost" style={{ flex: 1, fontSize: '13px', padding: '7px 4px' }} onClick={() => removeTime(5)}>−5 min</button>
+                <button className="btn btn-danger" style={{ flex: 1, fontSize: '13px', padding: '7px 4px' }} onClick={stopTimer}>⏹ Detener</button>
+              </div>
+            </div>
 
             {groups.length === 0 ? (
               <div className="card">

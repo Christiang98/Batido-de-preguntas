@@ -63,7 +63,7 @@ export default function HomePage() {
         </div>
 
         <div className="fu fu1" style={{ marginBottom: '1.75rem' }}>
-          <div className="display-title">¡Bienvenido,<br/>explorador!</div>
+          <div className="display-title">¡Bienvenid@s</div>
           <div className="body-text mt05">Anotate para participar en la actividad de hoy.</div>
         </div>
 
@@ -85,9 +85,9 @@ export default function HomePage() {
 
         <div className="fu fu3" style={{ marginTop: 'auto', paddingTop: '2rem' }}>
           <hr />
-          <div className="body-text mb05">¿Sos el animador?</div>
+          <div className="body-text mb05">Panel de administración</div>
           <button className="btn btn-ghost" onClick={() => router.push('/admin')}>
-            Entrar como animador
+            Entrar como Administrador
           </button>
         </div>
       </div>
