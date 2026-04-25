@@ -114,6 +114,7 @@ export default function AdminPage() {
         pairHistory: newPairHistory,
         timerEnd: null,
         timerRunning: false,
+        timerDuration: null,
         count: list.length
       })
       await set(ref(db, 'session'), { status: 'active', round })
@@ -128,6 +129,7 @@ export default function AdminPage() {
   async function startTimer() {
     const end = Date.now() + timerMinutes * 60 * 1000
     await set(ref(db, 'groups/timerEnd'), end)
+    await set(ref(db, 'groups/timerDuration'), timerMinutes * 60)
     await set(ref(db, 'groups/timerRunning'), true)
   }
 

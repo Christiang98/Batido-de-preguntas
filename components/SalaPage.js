@@ -17,7 +17,7 @@ function Avatar({ name, size = 'normal' }) {
   )
 }
 
-function Timer({ timerEnd }) {
+function Timer({ timerEnd, totalDuration }) {
   const [left, setLeft] = useState(null)
   useEffect(() => {
     if (!timerEnd) return
@@ -27,13 +27,41 @@ function Timer({ timerEnd }) {
     return () => clearInterval(id)
   }, [timerEnd])
   if (left === null || left <= 0) return null
+
   const mins = Math.floor(left / 60)
-  const secs = String(left % 60).padStart(2, '0')
+  const secs = left % 60
+  const m1 = Math.floor(mins / 10)
+  const m2 = mins % 10
+  const s1 = Math.floor(secs / 10)
+  const s2 = secs % 10
   const urgent = left <= 60
+  const pct = totalDuration ? Math.min(100, (left / totalDuration) * 100) : null
+
   return (
-    <div className="timer-display si">
-      <div className={`timer-num ${urgent ? 'urgent' : 'normal'}`}>{mins}:{secs}</div>
-      <div className="timer-sub">tiempo restante</div>
+    <div className={`timer-display si ${urgent ? 'urgent' : 'normal'}`}>
+      <div className="timer-track">
+        <span className="timer-digit">{m1}</span>
+        <span className="timer-digit">{m2}</span>
+        <span className="timer-colon">:</span>
+        <span className="timer-digit">{s1}</span>
+        <span className="timer-digit">{s2}</span>
+      </div>
+      <div className="timer-label">
+        <span className="timer-sub">tiempo restante</span>
+      </div>
+      {pct !== null && (
+        <div className="timer-bar-wrap">
+          <div
+            className="timer-bar"
+            style={{
+              width: `${pct}%`,
+              background: urgent
+                ? 'linear-gradient(90deg, var(--red), var(--red2))'
+                : 'linear-gradient(90deg, var(--gold), var(--gold2))'
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -53,6 +81,7 @@ export default function SalaPage() {
   const [dinamica, setDinamica] = useState(null)
   const [myGroup, setMyGroup] = useState(null)
   const [timerEnd, setTimerEnd] = useState(null)
+  const [timerDuration, setTimerDuration] = useState(null)
 
   useEffect(() => {
     const name = localStorage.getItem('explorador_name')
@@ -76,9 +105,10 @@ export default function SalaPage() {
         setGroups(list)
         setDinamica(g.dinamica || null)
         setTimerEnd(g.timerEnd || null)
+        setTimerDuration(g.timerDuration || null)
         setMyGroup(list.find(gr => (gr.members || []).includes(name)) || null)
       } else {
-        setGroups([]); setMyGroup(null); setDinamica(null); setTimerEnd(null)
+        setGroups([]); setMyGroup(null); setDinamica(null); setTimerEnd(null); setTimerDuration(null)
       }
     }))
 
@@ -107,7 +137,7 @@ export default function SalaPage() {
             <div className="header-title">Hola, {myName}!</div>
             <div className="header-sub">Batallón PCB</div>
           </div>
-          <button onClick={leave} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--body)', fontWeight: 500 }}>
+          <button onClick={leave} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--body)', fontWeight: 500, flexShrink: 0 }}>
             Salir
           </button>
         </div>
@@ -145,7 +175,7 @@ export default function SalaPage() {
             <div className="fu fu1" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.25rem' }}>
               <div className="round-badge">⚡ Ronda {session?.round}</div>
             </div>
-            <Timer timerEnd={timerEnd} />
+            <Timer timerEnd={timerEnd} totalDuration={timerDuration} />
             {myGroup ? (
               <div className="card-my-group fu fu2">
                 <div className="section-label" style={{ color: 'var(--gold2)', marginBottom: '0.85rem' }}>✦ Tu grupo</div>
