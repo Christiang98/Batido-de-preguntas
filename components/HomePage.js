@@ -63,7 +63,7 @@ export default function HomePage() {
         </div>
 
         <div className="fu fu1" style={{ marginBottom: '1.75rem' }}>
-          <div className="display-title">¡Bienvenid@s</div>
+          <div className="display-title">Bienvenid@s</div>
           <div className="body-text mt05">Anotate para participar en la actividad de hoy.</div>
         </div>
 
